@@ -17,15 +17,12 @@ sealed class TrayApp : ApplicationContext
     [DllImport("user32.dll")]   static extern bool   UnhookWindowsHookEx(IntPtr hhk);
     [DllImport("user32.dll")]   static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
     [DllImport("kernel32.dll", CharSet = CharSet.Auto)] static extern IntPtr GetModuleHandle(string? lpModuleName);
-    [DllImport("kernel32.dll")] static extern bool   SetConsoleCtrlHandler(ConsoleCtrlDelegate? handler, bool add);
 
     // Magnification API — hides/shows the cursor at the DWM compositor level,
     // which works globally across all processes including WSLg windows.
     [DllImport("Magnification.dll")] static extern bool MagInitialize();
     [DllImport("Magnification.dll")] static extern bool MagUninitialize();
     [DllImport("Magnification.dll")] static extern bool MagShowSystemCursor(bool fShowCursor);
-
-    private delegate bool ConsoleCtrlDelegate(uint ctrlType);
 
     private const int WH_KEYBOARD_LL = 13;
     private const int WH_MOUSE_LL    = 14;
@@ -46,9 +43,8 @@ sealed class TrayApp : ApplicationContext
     private POINT  _lastPos;
 
     // Keep delegates alive to prevent GC collection
-    private readonly HookProc            _kbProc;
-    private readonly HookProc            _msProc;
-    private readonly ConsoleCtrlDelegate _ctrlProc;
+    private readonly HookProc _kbProc;
+    private readonly HookProc _msProc;
 
     private readonly NotifyIcon _tray;
 
@@ -58,10 +54,8 @@ sealed class TrayApp : ApplicationContext
     {
         MagInitialize();
 
-        _kbProc   = KeyboardHook;
-        _msProc   = MouseHook;
-        _ctrlProc = CtrlHandler;
-        SetConsoleCtrlHandler(_ctrlProc, true);
+        _kbProc = KeyboardHook;
+        _msProc = MouseHook;
 
         var menu = new ContextMenuStrip();
         menu.Items.Add("Exit", null, (_, _) => ExitApp());
@@ -132,15 +126,6 @@ sealed class TrayApp : ApplicationContext
     }
 
     // ── Cleanup ──────────────────────────────────────────────────────────────
-
-    // Ctrl+C / Ctrl+Break / window close — called on a background thread by the OS.
-    // Application.Exit() is thread-safe; it posts WM_QUIT which causes Application.Run()
-    // to return, WinForms then disposes this ApplicationContext → Dispose → ExitApp.
-    private bool CtrlHandler(uint ctrlType)
-    {
-        Application.Exit();
-        return true; // suppress default termination; we handle cleanup via ExitApp
-    }
 
     private void ExitApp()
     {

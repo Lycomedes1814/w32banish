@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace CursorHider;
+namespace W32Banish;
 
 static class Program
 {

@@ -6,7 +6,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>CursorHider</AssemblyName>
+    <AssemblyName>w32banish</AssemblyName>
   </PropertyGroup>
 
 </Project>

@@ -1,4 +1,4 @@
-# CursorHider
+# w32banish
 
 Hides the mouse cursor while you type and restores it when you move the mouse. Runs as a Windows system tray app.
 
@@ -25,4 +25,4 @@ dotnet publish -c Release -r win-x64 --self-contained
 
 ## Usage
 
-Run `CursorHider.exe`. It appears in the system tray. Right-click the tray icon and choose **Exit** to quit.
+Run `w32banish.exe`. It appears in the system tray. Right-click the tray icon and choose **Exit** to quit.

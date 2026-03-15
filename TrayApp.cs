@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace CursorHider;
+namespace W32Banish;
 
 /// <summary>
 /// Runs as a system tray icon. Installs global low-level hooks:
@@ -69,7 +69,7 @@ sealed class TrayApp : ApplicationContext
         _tray = new NotifyIcon
         {
             Icon    = SystemIcons.Application,
-            Text    = "CursorHider – running",
+            Text    = "W32Banish – running",
             Visible = true,
             ContextMenuStrip = menu,
         };

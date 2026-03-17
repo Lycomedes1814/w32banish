@@ -40,32 +40,35 @@ sealed class TrayApp : ApplicationContext
     private IntPtr _kbHook;
     private IntPtr _msHook;
     private bool   _hidden;
+    private bool   _exited;
     private POINT  _lastPos;
 
     // Keep delegates alive to prevent GC collection
     private readonly HookProc _kbProc;
     private readonly HookProc _msProc;
 
-    private readonly NotifyIcon _tray;
+    private readonly NotifyIcon       _tray;
+    private readonly ContextMenuStrip _menu;
 
     // ── Constructor ──────────────────────────────────────────────────────────
 
     public TrayApp()
     {
-        MagInitialize();
+        if (!MagInitialize())
+            throw new InvalidOperationException("MagInitialize failed.");
 
         _kbProc = KeyboardHook;
         _msProc = MouseHook;
 
-        var menu = new ContextMenuStrip();
-        menu.Items.Add("Exit", null, (_, _) => ExitApp());
+        _menu = new ContextMenuStrip();
+        _menu.Items.Add("Exit", null, (_, _) => ExitApp());
 
         _tray = new NotifyIcon
         {
-            Icon    = SystemIcons.Application,
-            Text    = "W32Banish – running",
-            Visible = true,
-            ContextMenuStrip = menu,
+            Icon             = SystemIcons.Application,
+            Text             = "W32Banish – running",
+            Visible          = true,
+            ContextMenuStrip = _menu,
         };
 
         InstallHooks();
@@ -78,13 +81,16 @@ sealed class TrayApp : ApplicationContext
         var hMod = GetModuleHandle(null);
         _kbHook = SetWindowsHookEx(WH_KEYBOARD_LL, _kbProc, hMod, 0);
         _msHook = SetWindowsHookEx(WH_MOUSE_LL,    _msProc, hMod, 0);
+
+        if (_kbHook == IntPtr.Zero || _msHook == IntPtr.Zero)
+            throw new InvalidOperationException("SetWindowsHookEx failed.");
     }
 
     // ── Hook callbacks ───────────────────────────────────────────────────────
 
     private IntPtr KeyboardHook(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN))
+        if (nCode >= 0 && ((int)wParam == WM_KEYDOWN || (int)wParam == WM_SYSKEYDOWN))
             HideCursor();
 
         return CallNextHookEx(_kbHook, nCode, wParam, lParam);
@@ -92,7 +98,7 @@ sealed class TrayApp : ApplicationContext
 
     private IntPtr MouseHook(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && wParam == WM_MOUSEMOVE && _hidden)
+        if (nCode >= 0 && (int)wParam == WM_MOUSEMOVE && _hidden)
         {
             var s = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
             // Only restore if the mouse actually moved (ignore synthetic move events)
@@ -129,12 +135,16 @@ sealed class TrayApp : ApplicationContext
 
     private void ExitApp()
     {
+        if (_exited) return;
+        _exited = true;
+
         ShowCursorAgain();          // always restore before exit
         MagUninitialize();
         UnhookWindowsHookEx(_kbHook);
         UnhookWindowsHookEx(_msHook);
         _tray.Visible = false;
         _tray.Dispose();
+        _menu.Dispose();
         Application.Exit();
     }
 

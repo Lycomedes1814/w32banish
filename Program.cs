@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 namespace W32Banish;
 
 static class Program

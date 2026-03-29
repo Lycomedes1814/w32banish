@@ -89,7 +89,7 @@ sealed class TrayApp : ApplicationContext
 
         _tray = new NotifyIcon
         {
-            Icon             = SystemIcons.Application,
+            Icon             = CreateCursorIcon(),
             Text             = "W32Banish – running",
             Visible          = true,
             ContextMenuStrip = _menu,
@@ -198,6 +198,24 @@ sealed class TrayApp : ApplicationContext
             key.SetValue(AppName, $"\"{exe}\"");
             _startupItem.Checked = true;
         }
+    }
+
+    // ── Tray icon ────────────────────────────────────────────────────────────
+
+    private static Icon CreateCursorIcon()
+    {
+        using var bmp = new Bitmap(16, 16);
+        using (var g = Graphics.FromImage(bmp))
+        {
+            g.Clear(Color.Transparent);
+            // Black outline: filled right-triangle pointing upper-left
+            Point[] outer = [new(0, 0), new(0, 12), new(12, 0)];
+            g.FillPolygon(Brushes.Black, outer);
+            // White fill: same triangle inset by 1 px
+            Point[] inner = [new(1, 1), new(1, 10), new(10, 1)];
+            g.FillPolygon(Brushes.White, inner);
+        }
+        return Icon.FromHandle(bmp.GetHicon());
     }
 
     // ── Cleanup ──────────────────────────────────────────────────────────────

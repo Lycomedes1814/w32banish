@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Microsoft.Win32;
 
 namespace W32Banish;
 
@@ -31,9 +32,20 @@ sealed class TrayApp : ApplicationContext
     private const int WM_MOUSEMOVE   = 0x0200;
 
     [StructLayout(LayoutKind.Sequential)]
+    private struct KBDLLHOOKSTRUCT { public uint vkCode, scanCode, flags, time; public IntPtr dwExtraInfo; }
+    [StructLayout(LayoutKind.Sequential)]
     private struct MSLLHOOKSTRUCT { public POINT pt; public uint mouseData, flags, time; public IntPtr dwExtraInfo; }
     [StructLayout(LayoutKind.Sequential)]
     private struct POINT { public int x, y; }
+
+    // Virtual key codes for modifier keys
+    private const uint VK_LSHIFT   = 0xA0, VK_RSHIFT   = 0xA1;
+    private const uint VK_LCONTROL = 0xA2, VK_RCONTROL = 0xA3;
+    private const uint VK_LMENU   = 0xA4, VK_RMENU   = 0xA5;
+    private const uint VK_LWIN    = 0x5B, VK_RWIN    = 0x5C;
+
+    private const string RunKey  = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
+    private const string AppName = "W32Banish";
 
     // ── State ────────────────────────────────────────────────────────────────
 
@@ -41,14 +53,17 @@ sealed class TrayApp : ApplicationContext
     private IntPtr _msHook;
     private bool   _hidden;
     private bool   _exited;
+    private bool   _paused;
     private POINT  _lastPos;
 
     // Keep delegates alive to prevent GC collection
     private readonly HookProc _kbProc;
     private readonly HookProc _msProc;
 
-    private readonly NotifyIcon       _tray;
-    private readonly ContextMenuStrip _menu;
+    private readonly NotifyIcon          _tray;
+    private readonly ContextMenuStrip    _menu;
+    private readonly ToolStripMenuItem   _pauseItem;
+    private readonly ToolStripMenuItem   _startupItem;
 
     // ── Constructor ──────────────────────────────────────────────────────────
 
@@ -60,7 +75,16 @@ sealed class TrayApp : ApplicationContext
         _kbProc = KeyboardHook;
         _msProc = MouseHook;
 
+        _pauseItem  = new ToolStripMenuItem("Pause", null, (_, _) => TogglePause());
+        _startupItem = new ToolStripMenuItem("Start with Windows", null, (_, _) => ToggleStartup())
+        {
+            Checked = IsStartupEnabled(),
+        };
+
         _menu = new ContextMenuStrip();
+        _menu.Items.Add(_pauseItem);
+        _menu.Items.Add(_startupItem);
+        _menu.Items.Add(new ToolStripSeparator());
         _menu.Items.Add("Exit", null, (_, _) => ExitApp());
 
         _tray = new NotifyIcon
@@ -90,11 +114,22 @@ sealed class TrayApp : ApplicationContext
 
     private IntPtr KeyboardHook(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && ((int)wParam == WM_KEYDOWN || (int)wParam == WM_SYSKEYDOWN))
-            HideCursor();
+        if (nCode >= 0 && !_paused &&
+            ((int)wParam == WM_KEYDOWN || (int)wParam == WM_SYSKEYDOWN))
+        {
+            var kb = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
+            if (!IsModifierKey(kb.vkCode))
+                HideCursor();
+        }
 
         return CallNextHookEx(_kbHook, nCode, wParam, lParam);
     }
+
+    private static bool IsModifierKey(uint vk) =>
+        vk is VK_LSHIFT or VK_RSHIFT
+          or VK_LCONTROL or VK_RCONTROL
+          or VK_LMENU or VK_RMENU
+          or VK_LWIN or VK_RWIN;
 
     private IntPtr MouseHook(int nCode, IntPtr wParam, IntPtr lParam)
     {
@@ -129,6 +164,40 @@ sealed class TrayApp : ApplicationContext
         _hidden = false;
 
         MagShowSystemCursor(true);
+    }
+
+    // ── Pause / Resume ────────────────────────────────────────────────────────
+
+    private void TogglePause()
+    {
+        _paused = !_paused;
+        _pauseItem.Text = _paused ? "Resume" : "Pause";
+        _tray.Text = _paused ? "W32Banish – paused" : "W32Banish – running";
+        if (_paused) ShowCursorAgain();
+    }
+
+    // ── Start with Windows ──────────────────────────────────────────────────
+
+    private static bool IsStartupEnabled()
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(RunKey, false);
+        return key?.GetValue(AppName) is string;
+    }
+
+    private void ToggleStartup()
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(RunKey, true)!;
+        if (IsStartupEnabled())
+        {
+            key.DeleteValue(AppName, false);
+            _startupItem.Checked = false;
+        }
+        else
+        {
+            var exe = Environment.ProcessPath ?? Application.ExecutablePath;
+            key.SetValue(AppName, $"\"{exe}\"");
+            _startupItem.Checked = true;
+        }
     }
 
     // ── Cleanup ──────────────────────────────────────────────────────────────
